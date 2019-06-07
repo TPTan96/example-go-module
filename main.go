@@ -6,35 +6,44 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strings"
 	"text/template"
 )
 
-var funcs = template.FuncMap{"TypeOf": reflect.TypeOf}
+var funcs = template.FuncMap{
+	"TypeOf":  reflect.TypeOf,
+	"SliceOf": reflect.SliceOf,
+	"GetType": GetType,
+}
 
 type JsonData map[string]interface{}
 type Data struct {
 	Package  string
 	ModeName string
 	Data     JsonData
+	Structs  map[string]JsonData
 }
 
 const form = `
 package {{.Package}}
 
-type {{.ModeName}} struct { {{range $index, $value := .Data}}
-  {{$index}} {{TypeOf $value}} {{end}}
-}`
+type {{.ModeName}} struct { 
+{{range $key, $value := .Data}}{{$key}} {{GetType $value $key}}
+{{end}}}
+
+{{range $structName, $data := .Structs}}
+type {{$structName}} struct { 
+{{range $key, $value := $data}}{{$key}} {{GetType $value $key}}
+{{end}}}
+{{end}}
+`
+
+var data Data
 
 func main() {
-	// log.WithFields(log.Fields{
-	// 	"animal": "walrus",
-	// }).Info("A walrus appears")
-	// ac := accounting.Accounting{Symbol: "$", Precision: 2}
-	// fmt.Println(ac.FormatMoney(123.123))
-	// hello.Sayhello()
-	var data Data
 	data.Package = "first"
 	data.ModeName = "ModeName"
+	data.Structs = make(map[string]JsonData)
 
 	rawData, err := ioutil.ReadFile("./tmp/data.json")
 	if err != nil {
@@ -56,5 +65,35 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// fmt.Println(out.String())
+
+	fmt.Println(data)
+	// fmt.Println(GetType(data.Data["array"]))
+}
+
+func GetType(value interface{}, key string) string {
+	val := reflect.ValueOf(value)
+	kind := val.Kind()
+	if kind == reflect.Slice {
+		fmt.Println(kind)
+		if val.Len() == 0 {
+			return "[]interface{}"
+		}
+		return CheckType(value.([]interface{}))
+	} else if kind == reflect.Map {
+		out := strings.ToUpper(key)
+		temStruct := value.(map[string]interface{})
+		data.Structs[out] = temStruct
+		return out
+	}
+	return kind.String()
+}
+
+func CheckType(value []interface{}) string {
+	kieu := reflect.ValueOf(value[0]).Kind()
+	for _, v := range value {
+		if reflect.ValueOf(v).Kind() != kieu {
+			return "[]interface{}"
+		}
+	}
+	return "[]" + kieu.String()
 }
