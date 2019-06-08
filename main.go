@@ -17,6 +17,7 @@ var funcs = template.FuncMap{
 }
 
 type JsonData map[string]interface{}
+
 type Data struct {
 	Package  string
 	ModeName string
@@ -28,12 +29,12 @@ const form = `
 package {{.Package}}
 
 type {{.ModeName}} struct { 
-{{range $key, $value := .Data}}{{$key}} {{GetType $value $key}}
+{{range $key, $value := .Data}}	{{$key}} {{GetType $value $key}}
 {{end}}}
 
 {{range $structName, $data := .Structs}}
 type {{$structName}} struct { 
-{{range $key, $value := $data}}{{$key}} {{GetType $value $key}}
+{{range $key, $value := $data}}	{{$key}} {{GetType $value $key}}
 {{end}}}
 {{end}}
 `
@@ -78,7 +79,7 @@ func GetType(value interface{}, key string) string {
 		if val.Len() == 0 {
 			return "[]interface{}"
 		}
-		return CheckType(value.([]interface{}))
+		return GetTypeOfSlice(value.([]interface{}), key)
 	} else if kind == reflect.Map {
 		out := strings.ToUpper(key)
 		temStruct := value.(map[string]interface{})
@@ -88,12 +89,33 @@ func GetType(value interface{}, key string) string {
 	return kind.String()
 }
 
-func CheckType(value []interface{}) string {
-	kieu := reflect.ValueOf(value[0]).Kind()
+func GetTypeOfSlice(value []interface{}, key string) string {
+	kind := reflect.ValueOf(value[0]).Kind()
+	if kind == reflect.Map {
+		for _, val := range value {
+			if !DoMapsHaveSameField(value[0].(map[string]interface{}), val.(map[string]interface{})) {
+				return "[]interface{}"
+			}
+		}
+		nameOfMap := strings.ToUpper(key) + "S"
+		data.Structs[nameOfMap] = value[0].(map[string]interface{})
+		return "[]" + nameOfMap
+	}
 	for _, v := range value {
-		if reflect.ValueOf(v).Kind() != kieu {
+		if reflect.ValueOf(v).Kind() != kind {
 			return "[]interface{}"
 		}
 	}
-	return "[]" + kieu.String()
+	return "[]" + kind.String()
+}
+
+func DoMapsHaveSameField(map1, map2 map[string]interface{}) bool {
+	if len(map1) == len(map2) {
+		for key := range map1 {
+			if _, ok := map2[key]; !ok {
+				return false
+			}
+		}
+	}
+	return true
 }
